@@ -32,6 +32,7 @@ set(cryptonote_core_sources
   tx_pool.cpp
   tx_sanity_check.cpp
   cryptonote_tx_utils.cpp
+  db_reconstruct.cpp
   tx_verification_utils.cpp
 )
 

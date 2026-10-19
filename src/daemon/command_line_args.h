@@ -38,6 +38,14 @@ namespace daemon_args
 {
   std::string const WINDOWS_SERVICE_NAME = "Monero Daemon";
 
+  const command_line::arg_descriptor<bool> arg_db_reconstruct = {
+    "db-reconstruct"
+  , "Rebuild a crash-damaged blockchain database in --data-dir from its verified contents, then exit. "
+    "Requires --data-dir and accepts no other option; the config file is not read. "
+    "The damaged database is kept as lmdb.damaged-<time>"
+  , false
+  };
+
   const command_line::arg_descriptor<std::string, false, true, 2> arg_config_file = {
     "config-file"
   , "Specify configuration file"

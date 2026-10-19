@@ -26,6 +26,7 @@
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "db_lmdb.h"
+#include "salvage.h"
 
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
@@ -60,6 +61,7 @@ using namespace crypto;
 
 // Increase when the DB structure changes
 #define VERSION 5
+static_assert(VERSION == cryptonote::lmdb_salvage::SUPPORTED_SCHEMA_VERSION, "the --db-reconstruct reader (lmdb/salvage.cpp) must be updated for this DB schema");
 
 namespace
 {

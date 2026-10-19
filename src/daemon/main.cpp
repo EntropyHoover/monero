@@ -33,6 +33,8 @@
 #include "common/password.h"
 #include "common/util.h"
 #include "cryptonote_core/cryptonote_core.h"
+#include "cryptonote_core/db_reconstruct.h"
+#include "blocks/blocks.h"
 #include "cryptonote_basic/miner.h"
 #include "daemon/command_server.h"
 #include "daemon/daemon.h"
@@ -55,6 +57,49 @@
 
 namespace po = boost::program_options;
 namespace bf = boost::filesystem;
+
+int reconstruct_db(const po::variables_map &vm)
+{
+  for (const auto &option: vm)
+  {
+    if (option.second.defaulted() || option.first == daemon_args::arg_db_reconstruct.name || option.first == cryptonote::arg_data_dir.name)
+      continue;
+    if (option.first == daemon_args::arg_command.name)
+    {
+      std::cerr << "--" << daemon_args::arg_db_reconstruct.name << " cannot be combined with a daemon command" << std::endl;
+      return 1;
+    }
+    std::cerr << "--" << daemon_args::arg_db_reconstruct.name << " accepts no other option than --" << cryptonote::arg_data_dir.name <<
+      ", but --" << option.first << " was given" << std::endl;
+    return 1;
+  }
+  if (command_line::is_arg_defaulted(vm, cryptonote::arg_data_dir))
+  {
+    std::cerr << "--" << daemon_args::arg_db_reconstruct.name << " requires an explicit --" << cryptonote::arg_data_dir.name <<
+      ": the directory that contains the damaged lmdb folder" << std::endl;
+    return 1;
+  }
+  const bf::path data_dir = bf::absolute(command_line::get_arg(vm, cryptonote::arg_data_dir));
+  boost::system::error_code ec;
+  if (!bf::is_directory(data_dir, ec))
+  {
+    std::cerr << "Data directory " << data_dir.string() << " does not exist" << std::endl;
+    return 1;
+  }
+
+  mlog_configure((data_dir / std::string(CRYPTONOTE_NAME ".log")).string(), true, MAX_LOG_FILE_SIZE, MAX_LOG_FILES);
+  MGINFO("Monero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")");
+
+  // only set a flag here: the reconstruction notices it between blocks and cleans up
+  static std::atomic<bool> stop{false};
+  tools::signal_handler::install([](int) { stop = true; });
+#if defined(PER_BLOCK_CHECKPOINT)
+  const cryptonote::block_hashes_callback get_block_hashes = blocks::GetCheckpointsData;
+#else
+  const cryptonote::block_hashes_callback get_block_hashes = nullptr;
+#endif
+  return cryptonote::reconstruct_blockchain_db(data_dir, stop, get_block_hashes) ? 0 : 1;
+}
 
 uint16_t parse_public_rpc_port(const po::variables_map &vm)
 {
@@ -161,6 +206,7 @@ int main(int argc, char const * argv[])
       command_line::add_arg(visible_options, command_line::arg_help);
       command_line::add_arg(visible_options, command_line::arg_version);
       command_line::add_arg(visible_options, daemon_args::arg_config_file);
+      command_line::add_arg(visible_options, daemon_args::arg_db_reconstruct);
 
       // Settings
       command_line::add_arg(core_settings, daemon_args::arg_log_file);
@@ -221,6 +267,11 @@ int main(int argc, char const * argv[])
       std::cout << "Monero '" << MONERO_RELEASE_NAME << "' (v" << MONERO_VERSION_FULL << ")" << ENDL;
       return 0;
     }
+
+    // Database reconstruction runs on the command line alone: settings from a config file
+    // (proxies, ports, pruning, sync mode...) do not apply to it, and must not pick the database
+    if (command_line::get_arg(vm, daemon_args::arg_db_reconstruct))
+      return reconstruct_db(vm);
 
     boost::filesystem::path config_path = get_config_file_path(vm);
     boost::system::error_code ec;
